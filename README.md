@@ -1,12 +1,14 @@
 # Medallion Pipeline with AI Agents
 
-A **bronze → silver → gold** data pipeline over 10,280 facilities support tickets, with two LLM-powered agents for data quality analysis and semantic enrichment. Built with Python, pandas, PostgreSQL, and Llama 3.3 70B via Groq.
+A **bronze → silver → gold** data pipeline for tickets data, with two LLM-powered agents for data quality analysis and semantic enrichment. Built with Python, pandas, PostgreSQL, and Llama 3.3 70B via Groq.
+
+Design, Data model, Prompt and achitecture done by Abhishek, code generated through Claude Code
 
 ---
 
 ## How to Run
 
-**Prerequisites:** Docker installed, Groq API key (free at [console.groq.com](https://console.groq.com))
+**Prerequisites:** Docker installed, Groq API key
 
 ```bash
 cp .env.example .env        # add your GROQ_API_KEY

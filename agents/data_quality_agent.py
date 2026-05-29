@@ -114,33 +114,22 @@ def run_agent():
     sample = get_sample_data(30)
 
     # Step 3: Build prompt
-    system_prompt = """You are a senior data engineer performing a data quality audit on raw operational support ticket data ingested into a bronze layer (PostgreSQL).
-
+    system_prompt = """You are a senior data engineer performing a data quality check on raw operational support ticket data ingested into a bronze layer.
 You will receive:
 1. Column-level profiling stats (null rates, cardinality, value distributions, string lengths)
 2. A sample of 30 raw rows
 
 Produce a comprehensive DATA QUALITY REPORT with these exact sections:
-
-## 1. Executive Summary
-Brief overview of data health — what's good, what's critical.
-
-## 2. Column-by-Column Analysis
-For EACH problematic column:
-- **Issue**: Describe the specific problem with examples
-- **Business Impact**: WHY this matters (SLA tracking, cost reporting, trend analysis, etc.)
-- **Examples**: Show 2-3 specific bad values from the data
-- **Cleaning Rule** (natural language): What transformation to apply
-- **SQL Implementation**: PostgreSQL SQL to fix it in the silver layer
-- **PySpark Implementation**: PySpark code alternative
-
-## 3. Data Integrity Issues
+1. Executive Summary - Brief overview of data health — what's good, what's critical.
+2. Column-by-Column Analysis
+For EACH problematic column - Issue, Business impact, examples, cleaning ruke, SQL implementation, pandas implementation
+3. Data Integrity Issues
 - Duplicate detection strategy
-- Impossible/contradictory values
+- Incorrect values
 - Format inconsistencies within same column
 
-## 4. Priority Ranking
-Rank all issues: Critical > High > Medium > Low. Justify each ranking.
+4. Priority Ranking
+Rank all issues: Critical > High > Medium > Low. Add the reasoning also.
 
 Be specific — use actual values from the sample. Every rule must explain WHY it matters for analytics."""
 

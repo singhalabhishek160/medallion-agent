@@ -87,25 +87,20 @@ def get_tickets_to_classify(limit=100):
 
 def classify_batch(tickets):
     """Send a batch of tickets to LLM for semantic extraction."""
-    system_prompt = """You are a facilities management expert. For each support ticket, extract structured information from the free-text description:
+    system_prompt = """You are a operation manager. For each support ticket, extract structured information from the free-text description:
 
-1. **urgency_signal**: Based on language cues (not just priority field). One of: "critical", "high", "medium", "low"
-   - "critical": safety risk, system down, production impact mentioned
-   - "high": multiple people affected, escalation language, repeated issue  
-   - "medium": single system, inconvenience, standard request
-   - "low": cosmetic, future concern, informational
+1. urgency_signal: Based on language cues (not just priority field). One of: "critical", "high", "medium", "low"
 
-2. **affected_system**: The specific equipment/system affected. Extract from description.
-   Examples: "HVAC compressor", "fire alarm panel", "elevator motor", "main water line", "LED lighting", "door access control"
+2. affected_system ; The specific equipment/system affected. Extract from description.
+   Examples: "HVAC compressor", "fire alarm panel", "elevator motor"
 
-3. **location_detail**: Specific location BEYOND the building name. Extract floor, wing, room.
-   Examples: "floor 3 east wing", "server room 201", "parking level B2", "main lobby"
+3. location_detail: Specific location BEYOND the building name. Extract floor, wing, room.
+   Examples: "floor 3 east wing", "server room 201", 
 
-4. **root_cause_category**: Infer likely root cause category:
-   "equipment_age", "overload", "weather", "human_error", "design_flaw", "wear_and_tear", "external_vendor", "unknown"
+4. root_cause_category: Infer likely root cause category:
+   "equipment_age", "overload"
 
-Return ONLY a valid JSON array. Each object: {"id": "TKT-XXXX", "urgency_signal": "...", "affected_system": "...", "location_detail": "...", "root_cause_category": "..."}
-If a field can't be determined from the text, use "unknown". Do NOT include any explanation, just the JSON array."""
+Return ONLY a valid JSON array. If a field can't be determined from the text, use "unknown"."""
 
     # Format tickets — truncate descriptions for token efficiency
     ticket_list = [
