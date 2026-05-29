@@ -1,5 +1,5 @@
 """
-Data Quality Agent - Uses Meta Llama 3.3 70B (via Together AI) to profile and audit data.
+Data Quality Agent - Uses Meta Llama 3.3 70B (via Groq) to profile and audit data.
 
 This agent:
 1. Profiles the bronze layer — distributions, null rates, outliers, cardinality
@@ -7,25 +7,22 @@ This agent:
 3. Generates the SQL AND Python/PySpark to implement each rule
 4. Explains WHY each rule matters for downstream analytics
 
-Uses Together AI (Llama 3.3 70B Turbo) — free $1 credit on signup, ~$0.001/call.
+Uses Groq (Llama 3.3 70B) — free tier available at console.groq.com.
 """
 import os
 import json
 import psycopg2
-import httpx
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Together AI uses OpenAI-compatible API; corporate proxy needs verify=False
-http_client = httpx.Client(verify=False)
+# Groq uses OpenAI-compatible API
 client = OpenAI(
-    api_key=os.getenv("TOGETHER_API_KEY"),
-    base_url="https://api.together.xyz/v1",
-    http_client=http_client,
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1",
 )
-MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+MODEL = "llama-3.3-70b-versatile"
 
 DB_CONFIG = {
     "host": os.getenv("POSTGRES_HOST", "localhost"),
@@ -160,7 +157,7 @@ Be specific — use actual values from the sample. Every rule must explain WHY i
 Produce the complete data quality report with SQL and PySpark implementations for each cleaning rule."""
 
     # Step 4: Call LLM
-    print("[DQ Agent] Calling Llama 3.3 70B (Groq)...")
+    print(f"[DQ Agent] Calling {MODEL} via Groq...")
     response = client.chat.completions.create(
         model=MODEL,
         messages=[

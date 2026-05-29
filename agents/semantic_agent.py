@@ -1,5 +1,5 @@
 """
-Semantic Classification Agent - Uses Meta Llama 3.3 70B (via Together AI) to enrich tickets.
+Semantic Classification Agent - Uses Meta Llama 3.3 70B (via Groq) to enrich tickets.
 
 This agent:
 1. Takes free-text/ambiguous columns from silver layer
@@ -7,7 +7,7 @@ This agent:
 3. Output lands in silver.ticket_enrichments as new structured, queryable columns
 4. Handles scale concerns: batching, caching (skip already-enriched), cost tracking
 
-Uses Together AI (Llama 3.3 70B Turbo) — free $1 credit on signup, ~$0.001/call.
+Uses Groq (Llama 3.3 70B) — free tier available at console.groq.com.
 Scale strategy:
 - Batch size of 20 tickets per LLM call (balance between context size and API calls)
 - Skip already-enriched tickets (idempotent, incremental)
@@ -18,20 +18,17 @@ import os
 import json
 import time
 import psycopg2
-import httpx
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Together AI uses OpenAI-compatible API; corporate proxy needs verify=False
-http_client = httpx.Client(verify=False)
+# Groq uses OpenAI-compatible API
 client = OpenAI(
-    api_key=os.getenv("TOGETHER_API_KEY"),
-    base_url="https://api.together.xyz/v1",
-    http_client=http_client,
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1",
 )
-MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+MODEL = "llama-3.3-70b-versatile"
 
 DB_CONFIG = {
     "host": os.getenv("POSTGRES_HOST", "localhost"),

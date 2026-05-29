@@ -57,17 +57,6 @@ CREATE TABLE IF NOT EXISTS gold.category_summary (
     _refreshed_at TIMESTAMP DEFAULT NOW()
 );
 
--- Gold: building summary
-CREATE TABLE IF NOT EXISTS gold.building_summary (
-    building TEXT PRIMARY KEY,
-    ticket_count INTEGER,
-    open_tickets INTEGER,
-    resolved_tickets INTEGER,
-    avg_cost NUMERIC(12,2),
-    top_category TEXT,
-    _refreshed_at TIMESTAMP DEFAULT NOW()
-);
-
 -- Gold: monthly trends
 CREATE TABLE IF NOT EXISTS gold.monthly_trends (
     month TEXT PRIMARY KEY,

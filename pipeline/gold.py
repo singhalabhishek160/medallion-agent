@@ -3,98 +3,98 @@ Gold Layer - Business-ready aggregations.
 
 Models:
 1. category_summary - Volume, avg resolution time, cost, SLA breach rate per category
-2. building_summary - Per-building scorecard
-3. monthly_trends - Time-series for capacity planning
+2. monthly_trends  - Time-series for capacity planning
 """
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import (
-    col, count, avg, sum as spark_sum, when, lit,
-    date_format, round as spark_round, first
-)
-from datetime import datetime, timezone
+import os
+import pandas as pd
+import psycopg2
+from psycopg2.extras import execute_values
+from dotenv import load_dotenv
 
+load_dotenv()
 
-def get_spark():
-    return (
-        SparkSession.builder
-        .appName("medallion-gold")
-        .master("local[*]")
-        .getOrCreate()
-    )
-
-
-JDBC_URL = "jdbc:postgresql://localhost:5432/medallion"
-JDBC_PROPS = {"user": "pipeline", "password": "pipeline123", "driver": "org.postgresql.Driver"}
+DB_CONFIG = {
+    "host": os.getenv("POSTGRES_HOST", "localhost"),
+    "port": os.getenv("POSTGRES_PORT", "5432"),
+    "dbname": os.getenv("POSTGRES_DB", "medallion"),
+    "user": os.getenv("POSTGRES_USER", "pipeline"),
+    "password": os.getenv("POSTGRES_PASSWORD", "pipeline123"),
+}
 
 
 def build():
-    """Build gold aggregations from silver layer."""
-    spark = get_spark()
-    
+    conn = psycopg2.connect(**DB_CONFIG)
     print("[GOLD] Reading from silver.tickets...")
-    df = spark.read.jdbc(JDBC_URL, "silver.tickets", properties=JDBC_PROPS)
-    row_count = df.count()
-    print(f"[GOLD] Read {row_count} rows")
-    
-    if row_count == 0:
+    df = pd.read_sql("SELECT * FROM silver.tickets", conn)
+    print(f"[GOLD] Read {len(df)} rows")
+
+    if df.empty:
         print("[GOLD] No silver data. Skipping.")
-        spark.stop()
+        conn.close()
         return
-    
-    now = datetime.now(timezone.utc).isoformat()
-    
+
+    cur = conn.cursor()
+
     # === Gold 1: Category Summary ===
-    cat_df = df.groupBy("category").agg(
-        count("ticket_id").alias("ticket_count"),
-        spark_round(avg("resolution_hours"), 2).alias("avg_resolution_hours"),
-        spark_round(spark_sum("cost"), 2).alias("total_cost"),
-        spark_round(
-            spark_sum(when(col("is_sla_breached") == True, 1).otherwise(0)) /
-            spark_sum(when(col("is_sla_breached").isNotNull(), 1).otherwise(0)),
-            4
-        ).alias("sla_breach_rate")
-    ).withColumn("_refreshed_at", lit(now))
-    
-    print(f"[GOLD] category_summary: {cat_df.count()} rows")
-    cat_df.write.jdbc(JDBC_URL, "gold.category_summary", mode="overwrite", properties=JDBC_PROPS)
-    
-    # === Gold 2: Building Summary ===
-    # Get top category per building
-    from pyspark.sql.window import Window
-    from pyspark.sql.functions import row_number, desc
-    
-    bld_cat = df.groupBy("building", "category").agg(count("*").alias("cnt"))
-    w = Window.partitionBy("building").orderBy(desc("cnt"))
-    top_cat = bld_cat.withColumn("rn", row_number().over(w)).filter(col("rn") == 1).select("building", col("category").alias("top_category"))
-    
-    bld_df = df.groupBy("building").agg(
-        count("ticket_id").alias("ticket_count"),
-        spark_sum(when(col("status") == "Open", 1).otherwise(0)).alias("open_tickets"),
-        spark_sum(when(col("status") == "Resolved", 1).otherwise(0)).alias("resolved_tickets"),
-        spark_round(avg("cost"), 2).alias("avg_cost"),
-    ).join(top_cat, "building", "left").withColumn("_refreshed_at", lit(now))
-    
-    print(f"[GOLD] building_summary: {bld_df.count()} rows")
-    bld_df.write.jdbc(JDBC_URL, "gold.building_summary", mode="overwrite", properties=JDBC_PROPS)
-    
-    # === Gold 3: Monthly Trends ===
-    monthly_df = (
-        df.filter(col("created_at").isNotNull())
-        .withColumn("month", date_format(col("created_at"), "yyyy-MM"))
-        .groupBy("month").agg(
-            count("ticket_id").alias("ticket_count"),
-            spark_sum(when(col("status") == "Resolved", 1).otherwise(0)).alias("resolved_count"),
-            spark_round(avg("resolution_hours"), 2).alias("avg_resolution_hours"),
-            spark_round(spark_sum("cost"), 2).alias("total_cost"),
-        ).withColumn("_refreshed_at", lit(now))
-        .orderBy("month")
-    )
-    
-    print(f"[GOLD] monthly_trends: {monthly_df.count()} rows")
-    monthly_df.write.jdbc(JDBC_URL, "gold.monthly_trends", mode="overwrite", properties=JDBC_PROPS)
-    
-    print("[GOLD] Done! All 3 models built.")
-    spark.stop()
+    cat = df.groupby("category").agg(
+        ticket_count=("ticket_id", "count"),
+        avg_resolution_hours=("resolution_hours", "mean"),
+        total_cost=("cost", "sum"),
+    ).reset_index()
+
+    sla = df[df["is_sla_breached"].notna()].groupby("category").apply(
+        lambda g: g["is_sla_breached"].sum() / g["is_sla_breached"].count()
+    ).reset_index(name="sla_breach_rate")
+
+    cat = cat.merge(sla, on="category", how="left")
+    cat["avg_resolution_hours"] = cat["avg_resolution_hours"].round(2)
+    cat["total_cost"] = cat["total_cost"].round(2)
+    cat["sla_breach_rate"] = cat["sla_breach_rate"].round(4)
+
+    cur.execute("TRUNCATE TABLE gold.category_summary")
+    execute_values(cur, """
+        INSERT INTO gold.category_summary
+            (category, ticket_count, avg_resolution_hours, total_cost, sla_breach_rate)
+        VALUES %s
+    """, [
+        (r["category"], int(r["ticket_count"]),
+         None if pd.isna(r["avg_resolution_hours"]) else r["avg_resolution_hours"],
+         None if pd.isna(r["total_cost"]) else r["total_cost"],
+         None if pd.isna(r["sla_breach_rate"]) else r["sla_breach_rate"])
+        for _, r in cat.iterrows()
+    ])
+    print(f"[GOLD] category_summary: {len(cat)} rows")
+
+    # === Gold 2: Monthly Trends ===
+    monthly_df = df[df["created_at"].notna()].copy()
+    monthly_df["month"] = pd.to_datetime(monthly_df["created_at"]).dt.strftime("%Y-%m")
+
+    monthly = monthly_df.groupby("month").agg(
+        ticket_count=("ticket_id", "count"),
+        resolved_count=("status", lambda s: (s == "Resolved").sum()),
+        avg_resolution_hours=("resolution_hours", "mean"),
+        total_cost=("cost", "sum"),
+    ).reset_index().sort_values("month")
+    monthly["avg_resolution_hours"] = monthly["avg_resolution_hours"].round(2)
+    monthly["total_cost"] = monthly["total_cost"].round(2)
+
+    cur.execute("TRUNCATE TABLE gold.monthly_trends")
+    execute_values(cur, """
+        INSERT INTO gold.monthly_trends
+            (month, ticket_count, resolved_count, avg_resolution_hours, total_cost)
+        VALUES %s
+    """, [
+        (r["month"], int(r["ticket_count"]), int(r["resolved_count"]),
+         None if pd.isna(r["avg_resolution_hours"]) else r["avg_resolution_hours"],
+         None if pd.isna(r["total_cost"]) else r["total_cost"])
+        for _, r in monthly.iterrows()
+    ])
+    print(f"[GOLD] monthly_trends: {len(monthly)} rows")
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("[GOLD] Done! All 2 models built.")
 
 
 if __name__ == "__main__":
