@@ -1,0 +1,11 @@
+venv/
+.venv/
+java/
+pgsql/
+pgdata/
+output/
+__pycache__/
+*.pyc
+.git/
+pg.log
+jars/

@@ -18,5 +18,20 @@ services:
       timeout: 3s
       retries: 10
 
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: medallion
+      POSTGRES_USER: pipeline
+      POSTGRES_PASSWORD: pipeline123
+      TOGETHER_API_KEY: ${TOGETHER_API_KEY}
+    volumes:
+      - ./output:/app/output
+
 volumes:
   pgdata:
